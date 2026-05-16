@@ -3,6 +3,7 @@ import numpy as np
 import joblib
 import os
 from pathlib import Path
+from skimage.feature import hog
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.applications.resnet50 import preprocess_input
 from tensorflow.keras.models import Model
@@ -13,19 +14,27 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 # ---------- Paths ----------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MODEL_PATH         = BASE_DIR / "models" / "svm_final_model.pkl"
-PCA_PATH           = BASE_DIR / "models" / "svm_pca_cnn.pkl"
+MODEL_PATH         = BASE_DIR / "models" / "best_knn_model.pkl"
 SCALER_BUNDLE_PATH = BASE_DIR / "models" / "scaler.pkl"
-LABEL_ENCODER_PATH = BASE_DIR / "models" / "label_encoder.pkl"
 
 # ---------- Config ----------
-THRESHOLD      = 0.6
-CNN_IMG_SIZE   = (224, 224)
-ROI_SIZE       = 250
-FRAME_SKIP     = 10
-UNKNOWN_LABEL  = 6
+THRESHOLD    = 0.5
+CNN_IMG_SIZE = (224, 224)
+ROI_SIZE     = 250
+FRAME_SKIP   = 10
 
-CLASS_NAMES = ["cardboard", "glass", "metal", "paper", "plastic", "trash", "unknown"]
+HOG_PARAMS = dict(orientations=9, pixels_per_cell=(8, 8),
+                  cells_per_block=(2, 2), block_norm="L2-Hys")
+
+CLASS_NAMES = {
+    0: "cardboard",
+    1: "glass",
+    2: "metal",
+    3: "paper",
+    4: "plastic",
+    5: "trash",
+    6: "unknown"
+}
 
 CLASS_COLORS = {
     "cardboard": (0,   165, 255),
@@ -38,34 +47,47 @@ CLASS_COLORS = {
 }
 
 # ---------- Load models ----------
-clf           = joblib.load(MODEL_PATH)
-pca           = joblib.load(PCA_PATH)
-label_encoder = joblib.load(LABEL_ENCODER_PATH)
+clf    = joblib.load(MODEL_PATH)
+bundle = joblib.load(SCALER_BUNDLE_PATH)
 
-bundle     = joblib.load(SCALER_BUNDLE_PATH)
-cnn_scaler = bundle["cnn_scaler"]
-cnn_weight = bundle["cnn_weight"]
+cnn_scaler     = bundle["cnn_scaler"]
+hog_std_scaler = bundle["hog_standard_scaler"]
+hog_normalizer = bundle["hog_normalizer"]
+hog_weight     = bundle["hog_weight"]
+cnn_weight     = bundle["cnn_weight"]
 
 base      = ResNet50(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
 cnn_model = Model(inputs=base.input, outputs=GlobalAveragePooling2D()(base.output))
 
-# ---------- Feature extraction (CNN only, matching training) ----------
+# ---------- Feature extraction (HOG + CNN, matching training) ----------
 def extract_features(frame_bgr):
     img = cv2.resize(frame_bgr, CNN_IMG_SIZE)
-    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    batch = preprocess_input(np.expand_dims(rgb.astype(np.float32), 0))
-    cnn_raw    = cnn_model.predict(batch, verbose=0)
-    cnn_scaled = cnn_weight * cnn_scaler.transform(cnn_raw)
-    return pca.transform(cnn_scaled)
 
-# ---------- Predict ----------
+    # CNN
+    rgb        = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    batch      = preprocess_input(np.expand_dims(rgb.astype(np.float32), 0))
+    cnn_scaled = cnn_weight * cnn_scaler.transform(cnn_model.predict(batch, verbose=0))
+
+    # HOG
+    gray       = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    hog_raw    = hog(gray, **HOG_PARAMS).reshape(1, -1)
+    hog_scaled = hog_weight * hog_normalizer.transform(hog_std_scaler.transform(hog_raw))
+
+    return np.hstack([hog_scaled, cnn_scaled])  # HOG first, then CNN
+
+# ---------- Predict with vote-based rejection ----------
 def predict(features):
-    probs    = clf.predict_proba(features)[0]
-    max_prob = probs.max()
-    if max_prob < THRESHOLD:
-        return "unknown", max_prob
-    label = label_encoder.inverse_transform([np.argmax(probs)])[0]
-    return label, max_prob
+    distances, indices = clf.kneighbors(features)
+    neighbor_labels    = clf._y[indices[0]]
+
+    labels, counts = np.unique(neighbor_labels, return_counts=True)
+    best_idx    = np.argmax(counts)
+    best_label  = labels[best_idx]
+    confidence  = counts[best_idx] / clf.n_neighbors
+
+    if confidence < THRESHOLD:
+        return "unknown", confidence
+    return CLASS_NAMES[best_label], confidence
 
 # ---------- Draw overlay ----------
 def draw_overlay(frame, label, conf):
