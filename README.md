@@ -1,7 +1,5 @@
 # Material Stream Identification System
 
-Cairo University — Faculty of Computing and Artificial Intelligence
-Machine Learning Course — Final Project
 
 | ID | Class     | Description                                       |
 |----|-----------|---------------------------------------------------|
@@ -130,3 +128,7 @@ The real-time application captures live webcam frames, crops a **250×250 ROI** 
 | Martina Waleed Salah        | KNN Classifier          |
 | Malak Moustafa Abdel-Maboud | SVM Classifier          |
 | Jumanah Muhammad Ali        | Camera App & Repository |
+
+---
+*This project was developed as a team final project for the Machine Learning course,
+Faculty of Computer Science and Artificial Intelligence, Cairo University - Spring 2026.*
