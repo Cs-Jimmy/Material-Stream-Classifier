@@ -1,0 +1,8 @@
+dataset/
+data_split/
+features/
+clean_ml/
+best_model.pkl
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
