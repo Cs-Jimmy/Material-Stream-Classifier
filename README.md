@@ -116,7 +116,7 @@ The real-time application captures live webcam frames, crops a **250×250 ROI** 
  
 ![plastic detection](demo/plastic_detection.png)
 ![trash detection](demo/trash_detection.png)
- 
+![Demo](demo/material_classifier_demo.gif)
 ---
  
 ## Contributors
