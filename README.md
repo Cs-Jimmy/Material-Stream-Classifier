@@ -114,8 +114,6 @@ SVM was selected for deployment because it achieved the highest test accuracy (9
  
 The real-time application captures live webcam frames, crops a **250×250 ROI** from the centre, extracts CNN features, applies PCA, and runs the SVM classifier. Inference runs every 10th frame (~3 predictions/second) to keep the feed smooth. If the maximum class probability falls below 0.5, the prediction is rejected and labelled Unknown. The predicted class and confidence are shown as a colour-coded overlay.
  
-![plastic detection](demo/plastic_detection.png)
-![trash detection](demo/trash_detection.png)
 ![Demo](demo/material_classifier_demo.gif)
 ---
  
